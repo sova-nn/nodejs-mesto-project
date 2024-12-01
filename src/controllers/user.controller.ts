@@ -1,19 +1,31 @@
 import { NextFunction, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { constants } from 'http2';
-import jwt from 'jsonwebtoken';
-import { ISessionRequest } from '../middlewares/auth.middleware';
 import User from '../models/user/user';
+import { TEnhancedRequest } from '../types';
+import {ERROR_MESSAGES} from "../middlewares/errors/config";
+
+export const getUserData = (req: Request, res: Response, next: NextFunction) => {
+  const { userId } = req.params;
+  return User.findOne({ _id: userId })
+    .orFail()
+    .then((user) => {
+      res.send(user);
+    })
+    .catch(next);
+};
 
 export const getUsers = (req: Request, res: Response, next: NextFunction) => User.find({})
-  .then((users) => res.send({ data: users }))
+  .then((users) => {
+    res.send({ data: users });
+  })
   .catch(next);
 
 // eslint-disable-next-line max-len
 export const getUserById = (req: Request, res: Response, next: NextFunction) => User.findById(req.params.userId)
   .then((user) => {
     if (!user) {
-      throw new Error('Пользователь не найден');
+      throw new Error(ERROR_MESSAGES.UserNotExists);
     }
     res.send({ data: user });
   })
@@ -38,61 +50,40 @@ export const createUser = async (req: Request, res: Response, next: NextFunction
         .send({ data: user });
     })
     .catch((err) => {
-      if (err.code === 11000) {
-        return next(new Error('Такая запись уже есть'));
+      if (err.code === 409 || err.code === 11000) {
+        return next(new Error(ERROR_MESSAGES.DublicateItem));
       } return next(err);
     });
 };
 
-export const getUserData = (req: Request, res: Response, next: NextFunction) => {
-  const { userId } = req.params;
-  return User.findOne({ _id: userId })
-    .orFail()
-    .then((user) => {
-      res.send(user);
-    })
-    .catch(next);
-};
+export const updateUser = (req: TEnhancedRequest, res: Response, next: NextFunction) => {
+  const { name, about } = req.body;
 
-export const login = (req: Request, res: Response, next: NextFunction) => {
-  const { email, password } = req.body;
-  return User.findUserByCredentials(email, password).then((user: any) => {
-    const token = jwt.sign({ _id: user._id }, 'super-strong-secret', { expiresIn: '1d' });
-    res
-      .send({
-        token,
-      });
-  })
-    .catch(next);
-};
-
-export const updateUser = (req: Request, res: Response, next: NextFunction) => {
-  const {
-    name,
-    about,
-  } = req.body;
-  return User.findOneAndUpdate(
-    { _id: req.body.user._id },
+  User.findByIdAndUpdate(
+    req.user?._id,
     { name, about },
-    { new: true, runValidators: true },
   )
-    .orFail()
-    .then((user) => res.send({ data: user }))
-    .catch(next);
+    .then((user) => res.send({
+      _id: user?._id,
+      avatar: user?.avatar,
+      name,
+      about,
+    }))
+    .catch(() => next(new Error(ERROR_MESSAGES.UserNotExists)));
 };
 
-export const updateAvatar = (req: ISessionRequest, res: Response, next: NextFunction) => {
+export const updateAvatar = (req: TEnhancedRequest, res: Response, next: NextFunction) => {
   const { avatar } = req.body;
-  // @ts-ignore
-  const { id: userId } = req.user;
-  return User.findOneAndUpdate(
-    { _id: userId },
+
+  User.findByIdAndUpdate(
+    req.user?._id,
     { avatar },
-    { new: true, runValidators: true },
   )
-    .orFail()
-    .then((user) => {
-      res.send({ data: user });
-    })
-    .catch(next);
+    .then((user) => res.send({
+      _id: user?._id,
+      avatar: user?.avatar,
+      name: user?.name,
+      about: user?.about,
+    }))
+    .catch(() => next(new Error(ERROR_MESSAGES.PersonNotExists)));
 };

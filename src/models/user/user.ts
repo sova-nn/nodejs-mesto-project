@@ -2,6 +2,7 @@ import {
   model, Model, Schema, Document, Error,
 } from 'mongoose';
 import bcrypt from 'bcryptjs';
+import {ERROR_MESSAGES} from "../../middlewares/errors/config";
 
 export interface IUser {
   name: string,
@@ -61,11 +62,11 @@ userSchema.static('findUserByCredentials', function findUserByCredentials(email:
   return this.findOne({ email }).select('+password')
     .then((user) => {
       if (!user) {
-        return Promise.reject(new Error('Некорректные данные'));
+        return Promise.reject(new Error(ERROR_MESSAGES.AccessDenied));
       }
       return bcrypt.compare(password, user.password).then((matched) => {
         if (!matched) {
-          return Promise.reject(new Error('Некорректные данные'));
+          return Promise.reject(new Error(ERROR_MESSAGES.AccessDenied));
         }
         return user;
       });
